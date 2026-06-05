@@ -1,17 +1,11 @@
-import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
-import 'package:gal/gal.dart';
-import 'package:image/image.dart' as img;
-// import 'package:image_gallery_saver_plus/image_gallery_saver_plus.dart';
-import 'package:intl/intl.dart';
 
 import 'package:animated_snack_bar/animated_snack_bar.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
-import 'package:path_provider/path_provider.dart';
 
 import 'logger_service.dart';
 
@@ -160,7 +154,7 @@ class _HomePageState extends State<HomePage> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
-                              '${logs.toString().isEmpty ? 0 : logs.toString().split('\n').length-1}',
+                              '${logs.toString().isEmpty ? 0 : logs.toString().split('\n').length}',
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.bold,
@@ -223,213 +217,48 @@ class _HomePageState extends State<HomePage> {
       final ui.FrameInfo frame = await codec.getNextFrame();
       final ui.Image original = frame.image;
 
-      // Create canvas
+      // Create a canvas to draw on
       final ui.PictureRecorder recorder = ui.PictureRecorder();
       final Canvas canvas = Canvas(recorder);
       final Paint paint = Paint();
 
-      // Draw original image
+      // Draw the original image
       canvas.drawImage(original, Offset.zero, paint);
 
-      // Signer details
+      // Format the signer string
       final signer = signerLabel.isNotEmpty ? signerLabel : 'Undefined';
-      final formattedTime =
-          DateFormat('yyyy.MM.dd HH:mm:ss').format(signTime) + ' IST';
+      final formattedTime = "${signTime.year}-${signTime.month}-${signTime.day} "
+          "${signTime.hour}:${signTime.minute}:${signTime.second}";
 
-      // Build signature text
+      // Build the text paragraph (only three lines)
       final ui.ParagraphBuilder paragraphBuilder = ui.ParagraphBuilder(
         ui.ParagraphStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.bold,
           textAlign: TextAlign.right,
         ),
       )
-
-      // Digitally Signed
-        ..pushStyle(
-          ui.TextStyle(
-            color: Colors.black,
-            fontSize: 18,
-            fontWeight: FontWeight.normal,
-            fontStyle: FontStyle.italic,
-          ),
-        )
-        ..addText('Digitally Signed\n')
-
-      // Signer
-        ..pushStyle(
-          ui.TextStyle(
-            color: Colors.black,
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-          ),
-        )
-        ..addText('Signer: $signer\n')
-
-      // Time
-        ..pushStyle(
-          ui.TextStyle(
-            color: Colors.black,
-            fontSize: 18,
-            fontWeight: FontWeight.normal,
-            fontStyle: FontStyle.italic,
-          ),
-        )
-        ..addText('Time: $formattedTime');
+        ..pushStyle(ui.TextStyle(color: const Color(0xFFCC0000)))
+        ..addText('Digitally Signed\nSigner: $signer\nTime: $formattedTime');
 
       final ui.Paragraph paragraph = paragraphBuilder.build()
-        ..layout(
-          ui.ParagraphConstraints(
-            width: original.width.toDouble(),
-          ),
-        );
+        ..layout(ui.ParagraphConstraints(width: original.width.toDouble()));
 
-      // Bottom-right position
+      // Position at bottom-right with 20px padding
       final double x = original.width - paragraph.width - 20;
       final double y = original.height - paragraph.height - 20;
+      canvas.drawParagraph(paragraph, Offset(x, y));
 
-      // ==========================
-      // GREEN TICK WATERMARK
-      // ==========================
-      final Paint tickPaint = Paint()
-        ..color = const Color(0x884CAF50) // semi-transparent green
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 10
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round;
-
-      // Position tick near signer text
-      final double tickX = x - 55;
-      final double tickY = y + 42;
-      final double tickSize = 40;
-
-      final Path tickPath = Path()
-        ..moveTo(tickX, tickY)
-        ..lineTo(
-          tickX + tickSize * 0.30,
-          tickY + tickSize * 0.30,
-        )
-        ..lineTo(
-          tickX + tickSize,
-          tickY - tickSize * 0.40,
-        );
-
-      canvas.drawPath(tickPath, tickPaint);
-
-      // Draw signature text
-      canvas.drawParagraph(
-        paragraph,
-        Offset(x, y),
-      );
-
-      // Convert to PNG
+      // Convert to PNG bytes
       final ui.Picture picture = recorder.endRecording();
-      final ui.Image signedImage = await picture.toImage(
-        original.width,
-        original.height,
-      );
-
-      final ByteData? byteData = await signedImage.toByteData(
-        format: ui.ImageByteFormat.png,
-      );
-
+      final ui.Image signedImage = await picture.toImage(original.width, original.height);
+      final ByteData? byteData = await signedImage.toByteData(format: ui.ImageByteFormat.png);
       return byteData?.buffer.asUint8List();
     } catch (e) {
       await addLog('Overlay error: $e');
       return null;
     }
   }
-  // Future<Uint8List?> overlaySignatureOnImage(
-  //     Uint8List originalPng,
-  //     String signerLabel,
-  //     DateTime signTime,
-  //     ) async {
-  //   try {
-  //     // Decode the original image
-  //     final ui.Codec codec = await ui.instantiateImageCodec(originalPng);
-  //     final ui.FrameInfo frame = await codec.getNextFrame();
-  //     final ui.Image original = frame.image;
-  //
-  //     // Create a canvas to draw on
-  //     final ui.PictureRecorder recorder = ui.PictureRecorder();
-  //     final Canvas canvas = Canvas(recorder);
-  //     final Paint paint = Paint();
-  //
-  //     // Draw the original image
-  //     canvas.drawImage(original, Offset.zero, paint);
-  //
-  //     // Format the signer string
-  //     final signer = signerLabel.isNotEmpty ? signerLabel : 'Undefined';
-  //     // final formattedTime = "${signTime.year}-${signTime.month}-${signTime.day} "
-  //     //     "${signTime.hour}:${signTime.minute}:${signTime.second}";
-  //     final formattedTime = DateFormat('yyyy.MM.dd HH:mm:ss').format(signTime) + ' IST';
-  //
-  //     // Build the text paragraph (only three lines)
-  //     final ui.ParagraphBuilder paragraphBuilder = ui.ParagraphBuilder(
-  //       ui.ParagraphStyle(
-  //         textAlign: TextAlign.right,
-  //       ),
-  //     )
-  //
-  //     // Digitally Signed
-  //       ..pushStyle(
-  //         ui.TextStyle(
-  //           color: Colors.black,
-  //           fontSize: 18,
-  //           // fontWeight: FontWeight.bold,
-  //           fontWeight: FontWeight.normal,
-  //           fontStyle: FontStyle.italic,
-  //         ),
-  //       )
-  //       ..addText('Digitally Signed\n')
-  //
-  //     // Signer
-  //       ..pushStyle(
-  //         ui.TextStyle(
-  //           color: Colors.black,
-  //           fontSize: 20,
-  //           fontWeight: FontWeight.bold
-  //         ),
-  //       )
-  //       ..addText('Signer: $signer\n')
-  //
-  //     // Time
-  //       ..pushStyle(
-  //         ui.TextStyle(
-  //           color: Colors.black,
-  //           fontSize: 18,
-  //           fontWeight: FontWeight.normal,
-  //           fontStyle: FontStyle.italic,
-  //         ),
-  //       )
-  //       ..addText('Time: $formattedTime');
-  //
-  //     // final ui.ParagraphBuilder paragraphBuilder = ui.ParagraphBuilder(
-  //     //   ui.ParagraphStyle(
-  //     //     fontSize: 20,
-  //     //     fontWeight: FontWeight.bold,
-  //     //     textAlign: TextAlign.right,
-  //     //   ),
-  //     // )
-  //     //   ..pushStyle(ui.TextStyle(color: const Color(0xFFCC0000)))
-  //     //   ..addText('Digitally Signed\nSigner: $signer\nTime: $formattedTime');
-  //
-  //     final ui.Paragraph paragraph = paragraphBuilder.build()
-  //       ..layout(ui.ParagraphConstraints(width: original.width.toDouble()));
-  //
-  //     // Position at bottom-right with 20px padding
-  //     final double x = original.width - paragraph.width - 20;
-  //     final double y = original.height - paragraph.height - 20;
-  //     canvas.drawParagraph(paragraph, Offset(x, y));
-  //
-  //     // Convert to PNG bytes
-  //     final ui.Picture picture = recorder.endRecording();
-  //     final ui.Image signedImage = await picture.toImage(original.width, original.height);
-  //     final ByteData? byteData = await signedImage.toByteData(format: ui.ImageByteFormat.png);
-  //     return byteData?.buffer.asUint8List();
-  //   } catch (e) {
-  //     await addLog('Overlay error: $e');
-  //     return null;
-  //   }
-  // }
   // ================================================================
 
   Future<String?> generateHashHex() async {
@@ -471,73 +300,34 @@ class _HomePageState extends State<HomePage> {
       context: context,
       builder: (context) {
         return Dialog(
-          insetPadding: const EdgeInsets.all(20),
-          child: SizedBox(
-            width: 700,
-            height: 800,
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            constraints: const BoxConstraints(maxHeight: 700),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                const Padding(
-                  padding: EdgeInsets.all(12),
-                  child: Text(
-                    'Signed Image Preview',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                const Text(
+                  'Signed Image Preview',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
-
-                // Expanded(
-                //   child: InteractiveViewer(
-                //     minScale: 0.5,
-                //     maxScale: 5,
-                //     child: Image.memory(
-                //       signedImageBytes!,
-                //       width: double.infinity,
-                //       fit: BoxFit.contain,
-                //     ),
-                //   ),
-                // ),
+                const SizedBox(height: 16),
                 Expanded(
-                  child: Container(
-                    width: double.infinity,
-                    height: double.infinity,
-                    padding: const EdgeInsets.all(8),
-                    child: InteractiveViewer(
-                      minScale: 0.5,
-                      maxScale: 5,
-                      child: SizedBox(
-                        width: double.infinity,
-                        height: double.infinity,
-                        child: Image.memory(
-                          signedImageBytes!,
-                          fit: BoxFit.contain,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.memory(signedImageBytes!),
                         ),
-                      ),
+                      ],
                     ),
                   ),
                 ),
-
-                const SizedBox(height: 10),
-
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    ElevatedButton.icon(
-                      onPressed: downloadSignedImagetodownloades,
-                      icon: const Icon(Icons.download),
-                      label: const Text('Download'),
-                    ),
-                    const SizedBox(width: 12),
-                    ElevatedButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Close'),
-                    ),
-                  ],
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Close'),
                 ),
-
-                const SizedBox(height: 12),
               ],
             ),
           ),
@@ -545,192 +335,6 @@ class _HomePageState extends State<HomePage> {
       },
     );
   }
-
-  // Future<void> downloadSignedImage() async {
-  //   try {
-  //     if (signedImageBytes == null) {
-  //       addLog('No image available');
-  //       return;
-  //     }
-  //
-  //     // A4 size at 300 DPI
-  //     const int a4Width = 2480;
-  //     const int a4Height = 3508;
-  //
-  //     final img.Image? original =
-  //     img.decodeImage(signedImageBytes!);
-  //
-  //     if (original == null) {
-  //       addLog('Unable to decode image');
-  //       return;
-  //     }
-  //
-  //     // Create A4 white canvas
-  //     final img.Image a4Canvas = img.Image(
-  //       width: a4Width,
-  //       height: a4Height,
-  //     );
-  //
-  //     img.fill(
-  //       a4Canvas,
-  //       color: img.ColorRgb8(255, 255, 255),
-  //     );
-  //
-  //     // Resize image to fit A4
-  //     final img.Image resized = img.copyResize(
-  //       original,
-  //       width: a4Width,
-  //     );
-  //
-  //     final int yOffset =
-  //     ((a4Height - resized.height) / 2).round();
-  //
-  //     img.compositeImage(
-  //       a4Canvas,
-  //       resized,
-  //       dstX: 0,
-  //       dstY: yOffset,
-  //     );
-  //
-  //     // Convert back to PNG
-  //     final Uint8List a4Bytes =
-  //     Uint8List.fromList(img.encodePng(a4Canvas));
-  //
-  //     final result = await ImageGallerySaverPlus.saveImage(
-  //       a4Bytes,
-  //       quality: 100,
-  //       name: 'signed_image_a4_${DateTime.now().millisecondsSinceEpoch}',
-  //     );
-  //
-  //     addLog('A4 Image saved successfully in gallary');
-  //     addLog(result.toString());
-  //
-  //   } catch (e) {
-  //     addLog('Download Error: $e');
-  //   }
-  // }
-
-  Future<void> downloadSignedImagetodownloades() async {
-    addLog('downloadSignedImagetodownloades Calling........');
-    try {
-      if (signedImageBytes == null) return;
-
-      // A4 size at 300 DPI
-      const int a4Width = 2480;
-      const int a4Height = 3508;
-
-      addLog('Decode original signed image Startinging........');
-      // Decode original signed image
-      final img.Image? original = img.decodeImage(signedImageBytes!);
-      addLog('Decode original signed image Ending........');
-
-      if (original == null) {
-        addLog('Unable to decode image');
-        return;
-      }
-
-      // Create white A4 canvas
-      final img.Image a4Canvas = img.Image(
-        width: a4Width,
-        height: a4Height,
-      );
-
-      img.fill(
-        a4Canvas,
-        color: img.ColorRgb8(255, 255, 255),
-      );
-
-      // Resize image to fit A4 width
-      final img.Image resized = img.copyResize(
-        original,
-        width: a4Width,
-      );
-
-      // Center vertically
-      final int yOffset =
-      ((a4Height - resized.height) / 2).round();
-
-      img.compositeImage(
-        a4Canvas,
-        resized,
-        dstX: 0,
-        dstY: yOffset,
-      );
-
-      // Convert A4 canvas to PNG
-      final Uint8List a4Bytes =
-      Uint8List.fromList(img.encodePng(a4Canvas));
-
-      // Save temporary file
-      final tempDir = await getTemporaryDirectory();
-
-      addLog('tempDir........$tempDir');
-
-      addLog('file creation started........');
-
-      final file = File(
-        '${tempDir.path}/signed_a4_${DateTime.now().millisecondsSinceEpoch}.png',
-      );
-
-      await file.writeAsBytes(a4Bytes);
-      addLog('file creation successfully.......');
-      // Save to Downloads/Gallery
-      await Gal.putImage(
-        file.path,
-        album: 'Downloads',
-      );
-
-      addLog('A4 image saved successfully in Downloads');
-    } catch (e) {
-      addLog('Download Error: $e');
-    }
-  }
-
-  // void showSignedImagePopup(String signature) {
-  //   if (signedImageBytes == null) {
-  //     addLog('No Signed Image Available');
-  //     return;
-  //   }
-  //
-  //   showDialog(
-  //     context: context,
-  //     builder: (context) {
-  //       return Dialog(
-  //         child: Container(
-  //           padding: const EdgeInsets.all(16),
-  //           constraints: const BoxConstraints(maxHeight: 700),
-  //           child: Column(
-  //             mainAxisSize: MainAxisSize.min,
-  //             children: [
-  //               const Text(
-  //                 'Signed Image Preview',
-  //                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-  //               ),
-  //               const SizedBox(height: 16),
-  //               Expanded(
-  //                 child: SingleChildScrollView(
-  //                   child: Column(
-  //                     children: [
-  //                       ClipRRect(
-  //                         borderRadius: BorderRadius.circular(12),
-  //                         child: Image.memory(signedImageBytes!),
-  //                       ),
-  //                     ],
-  //                   ),
-  //                 ),
-  //               ),
-  //               const SizedBox(height: 16),
-  //               ElevatedButton(
-  //                 onPressed: () => Navigator.pop(context),
-  //                 child: const Text('Close'),
-  //               ),
-  //             ],
-  //           ),
-  //         ),
-  //       );
-  //     },
-  //   );
-  // }
 
   @override
   void initState() {
@@ -1257,51 +861,15 @@ using DSC Token.
               ),
             ),
             const SizedBox(height: 10),
-            Container(
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: const Color(0xFF7C3AED),
-                // color: Colors.white,
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(12),
-                  topRight: Radius.circular(12),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.deepPurple.withOpacity(0.25),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-                child:Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.description, color: Colors.white, size: 18),
-                        const SizedBox(width: 8),
-                        const Text(
-                          'Document Content',
-                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
-                        ),
-                      ],
-                    ),
-                  ),
-              ),
+
             // Document content with RepaintBoundary
-            Align(
-              alignment: Alignment.topLeft,
-              child:RepaintBoundary(
+            RepaintBoundary(
               key: repaintKey,
               child: Container(
                 width: double.infinity,
                 decoration: BoxDecoration(
-                  // color: const Color(0xFF7C3AED),
-                  // borderRadius: BorderRadius.circular(12),
-                  // borderRadius: const BorderRadius.only(
-                  //   bottomLeft: Radius.circular(12),
-                  //   bottomRight: Radius.circular(12),
-                  // ),
+                  color: const Color(0xFF7C3AED),
+                  borderRadius: BorderRadius.circular(12),
                   boxShadow: [
                     BoxShadow(
                       color: Colors.deepPurple.withOpacity(0.25),
@@ -1313,35 +881,35 @@ using DSC Token.
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Padding(
-                    //   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    //   child: Row(
-                    //     children: [
-                    //       const Icon(Icons.description, color: Colors.white, size: 18),
-                    //       const SizedBox(width: 8),
-                    //       const Text(
-                    //         'Document Content',
-                    //         style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
-                    //       ),
-                    //     ],
-                    //   ),
-                    // ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.description, color: Colors.white, size: 18),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'Document Content',
+                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
+                          ),
+                        ],
+                      ),
+                    ),
                     Container(
-                      // margin: const EdgeInsets.all(1),
+                      margin: const EdgeInsets.all(1),
                       child: TextField(
                         controller: textController,
                         maxLines: 6,
                         decoration: InputDecoration(
                           hintText: 'Enter text to digitally sign...',
                           filled: true,
-                          fillColor: Colors.white,
+                          fillColor: const Color(0xFFF7F2FF),
                           contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                          // border: OutlineInputBorder(borderRadius: BorderRadius.circular(11), borderSide: BorderSide.none),
-                          // enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(11), borderSide: BorderSide.none),
-                          // focusedBorder: OutlineInputBorder(
-                          //   // borderRadius: BorderRadius.circular(11),
-                          //   // borderSide: const BorderSide(color: Colors.deepPurple, width: 2),
-                          // ),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(11), borderSide: BorderSide.none),
+                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(11), borderSide: BorderSide.none),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(11),
+                            borderSide: const BorderSide(color: Colors.deepPurple, width: 2),
+                          ),
                         ),
                         style: const TextStyle(fontSize: 15, height: 1.3),
                       ),
@@ -1350,7 +918,6 @@ using DSC Token.
                 ),
               ),
             ),
-      ),
 
             const SizedBox(height: 6),
             SizedBox(
