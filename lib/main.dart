@@ -469,82 +469,196 @@ class _HomePageState extends State<HomePage> {
 
     showDialog(
       context: context,
+      barrierDismissible: false, // prevent accidental dismiss while loading
       builder: (context) {
-        return Dialog(
-          insetPadding: const EdgeInsets.all(20),
-          child: SizedBox(
-            width: 700,
-            height: 800,
-            child: Column(
-              children: [
-                const Padding(
-                  padding: EdgeInsets.all(12),
-                  child: Text(
-                    'Signed Image Preview',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
+        return FutureBuilder<Uint8List>(
+          future: createA4ImageFrom(signedImageBytes!),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Dialog(
+                child: Padding(
+                  padding: EdgeInsets.all(32),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 16),
+                      Text('Preparing full‑page preview...'),
+                    ],
                   ),
                 ),
+              );
+            }
 
-                // Expanded(
-                //   child: InteractiveViewer(
-                //     minScale: 0.5,
-                //     maxScale: 5,
-                //     child: Image.memory(
-                //       signedImageBytes!,
-                //       width: double.infinity,
-                //       fit: BoxFit.contain,
-                //     ),
-                //   ),
-                // ),
-                Expanded(
-                  child: Container(
-                    width: double.infinity,
-                    height: double.infinity,
-                    padding: const EdgeInsets.all(8),
-                    child: InteractiveViewer(
-                      minScale: 0.5,
-                      maxScale: 5,
-                      child: SizedBox(
-                        width: double.infinity,
-                        height: double.infinity,
-                        child: Image.memory(
-                          signedImageBytes!,
-                          fit: BoxFit.contain,
+            if (snapshot.hasError) {
+              return Dialog(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.error, color: Colors.red, size: 48),
+                      const SizedBox(height: 16),
+                      Text('Failed to create full‑page image:\n${snapshot.error}'),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Close'),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
+
+            final a4Bytes = snapshot.data!;
+            return Dialog(
+              insetPadding: const EdgeInsets.all(20),
+              child: SizedBox(
+                width: 700,
+                height: 800,
+                child: Column(
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: Text(
+                        'Signed Image Preview',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
                     ),
-                  ),
-                ),
-
-                const SizedBox(height: 10),
-
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    ElevatedButton.icon(
-                      onPressed: downloadSignedImagetodownloades,
-                      icon: const Icon(Icons.download),
-                      label: const Text('Download'),
+                    Expanded(
+                      child: Container(
+                        width: double.infinity,
+                        height: double.infinity,
+                        padding: const EdgeInsets.all(8),
+                        child: InteractiveViewer(
+                          minScale: 0.5,
+                          maxScale: 5,
+                          child: SizedBox(
+                            width: double.infinity,
+                            height: double.infinity,
+                            child: Image.memory(
+                              a4Bytes,
+                              fit: BoxFit.contain,
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
-                    const SizedBox(width: 12),
-                    ElevatedButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Close'),
+                    const SizedBox(height: 10),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed: downloadSignedImagetodownloades,
+                          icon: const Icon(Icons.download),
+                          label: const Text('Download'),
+                        ),
+                        const SizedBox(width: 12),
+                        ElevatedButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Close'),
+                        ),
+                      ],
                     ),
+                    const SizedBox(height: 12),
                   ],
                 ),
-
-                const SizedBox(height: 12),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         );
       },
     );
   }
+
+  // void showSignedImagePopup(String signature) {
+  //   if (signedImageBytes == null) {
+  //     addLog('No Signed Image Available');
+  //     return;
+  //   }
+  //
+  //   showDialog(
+  //     context: context,
+  //     builder: (context) {
+  //       return Dialog(
+  //         insetPadding: const EdgeInsets.all(20),
+  //         child: SizedBox(
+  //           width: 700,
+  //           height: 800,
+  //           child: Column(
+  //             children: [
+  //               const Padding(
+  //                 padding: EdgeInsets.all(12),
+  //                 child: Text(
+  //                   'Signed Image Preview',
+  //                   style: TextStyle(
+  //                     fontSize: 20,
+  //                     fontWeight: FontWeight.bold,
+  //                   ),
+  //                 ),
+  //               ),
+  //
+  //               // Expanded(
+  //               //   child: InteractiveViewer(
+  //               //     minScale: 0.5,
+  //               //     maxScale: 5,
+  //               //     child: Image.memory(
+  //               //       signedImageBytes!,
+  //               //       width: double.infinity,
+  //               //       fit: BoxFit.contain,
+  //               //     ),
+  //               //   ),
+  //               // ),
+  //               Expanded(
+  //                 child: Container(
+  //                   width: double.infinity,
+  //                   height: double.infinity,
+  //                   padding: const EdgeInsets.all(8),
+  //                   child: InteractiveViewer(
+  //                     minScale: 0.5,
+  //                     maxScale: 5,
+  //                     child: SizedBox(
+  //                       width: double.infinity,
+  //                       height: double.infinity,
+  //                       child: Image.memory(
+  //                         signedImageBytes!,
+  //                         fit: BoxFit.contain,
+  //                       ),
+  //                     ),
+  //                   ),
+  //                 ),
+  //               ),
+  //
+  //               const SizedBox(height: 10),
+  //
+  //               Row(
+  //                 mainAxisAlignment: MainAxisAlignment.center,
+  //                 children: [
+  //                   ElevatedButton.icon(
+  //                     onPressed: downloadSignedImagetodownloades,
+  //                     icon: const Icon(Icons.download),
+  //                     label: const Text('Download'),
+  //                   ),
+  //                   const SizedBox(width: 12),
+  //                   ElevatedButton(
+  //                     onPressed: () => Navigator.pop(context),
+  //                     child: const Text('Close'),
+  //                   ),
+  //                 ],
+  //               ),
+  //
+  //               const SizedBox(height: 12),
+  //             ],
+  //           ),
+  //         ),
+  //       );
+  //     },
+  //   );
+  // }
 
   // Future<void> downloadSignedImage() async {
   //   try {
@@ -615,76 +729,100 @@ class _HomePageState extends State<HomePage> {
     try {
       if (signedImageBytes == null) return;
 
-      // A4 size at 300 DPI
-      const int a4Width = 2480;
-      const int a4Height = 3508;
-
-      addLog('Decode original signed image Startinging........');
-      // Decode original signed image
-      final img.Image? original = img.decodeImage(signedImageBytes!);
-      addLog('Decode original signed image Ending........');
-
-      if (original == null) {
-        addLog('Unable to decode image');
-        return;
-      }
-
-      // Create white A4 canvas
-      final img.Image a4Canvas = img.Image(
-        width: a4Width,
-        height: a4Height,
-      );
-
-      img.fill(
-        a4Canvas,
-        color: img.ColorRgb8(255, 255, 255),
-      );
-
-      // Resize image to fit A4 width
-      final img.Image resized = img.copyResize(
-        original,
-        width: a4Width,
-      );
-
-      // Center vertically
-      final int yOffset =
-      ((a4Height - resized.height) / 2).round();
-
-      img.compositeImage(
-        a4Canvas,
-        resized,
-        dstX: 0,
-        dstY: yOffset,
-      );
-
-      // Convert A4 canvas to PNG
-      final Uint8List a4Bytes =
-      Uint8List.fromList(img.encodePng(a4Canvas));
+      addLog('Generating A4 image for download...');
+      final a4Bytes = await createA4ImageFrom(signedImageBytes!);
 
       // Save temporary file
       final tempDir = await getTemporaryDirectory();
-
-      addLog('tempDir........$tempDir');
-
-      addLog('file creation started........');
-
       final file = File(
         '${tempDir.path}/signed_a4_${DateTime.now().millisecondsSinceEpoch}.png',
       );
-
       await file.writeAsBytes(a4Bytes);
-      addLog('file creation successfully.......');
-      // Save to Downloads/Gallery
-      await Gal.putImage(
-        file.path,
-        album: 'Downloads',
-      );
+      addLog('file created successfully');
 
+      // Save to Downloads/Gallery
+      await Gal.putImage(file.path, album: 'Downloads');
       addLog('A4 image saved successfully in Downloads');
     } catch (e) {
       addLog('Download Error: $e');
     }
   }
+
+  // Future<void> downloadSignedImagetodownloades() async {
+  //   addLog('downloadSignedImagetodownloades Calling........');
+  //   try {
+  //     if (signedImageBytes == null) return;
+  //
+  //     // A4 size at 300 DPI
+  //     const int a4Width = 2480;
+  //     const int a4Height = 3508;
+  //
+  //     addLog('Decode original signed image Startinging........');
+  //     // Decode original signed image
+  //     final img.Image? original = img.decodeImage(signedImageBytes!);
+  //     addLog('Decode original signed image Ending........');
+  //
+  //     if (original == null) {
+  //       addLog('Unable to decode image');
+  //       return;
+  //     }
+  //
+  //     // Create white A4 canvas
+  //     final img.Image a4Canvas = img.Image(
+  //       width: a4Width,
+  //       height: a4Height,
+  //     );
+  //
+  //     img.fill(
+  //       a4Canvas,
+  //       color: img.ColorRgb8(255, 255, 255),
+  //     );
+  //
+  //     // Resize image to fit A4 width
+  //     final img.Image resized = img.copyResize(
+  //       original,
+  //       width: a4Width,
+  //     );
+  //
+  //     // Center vertically
+  //     final int yOffset =
+  //     ((a4Height - resized.height) / 2).round();
+  //
+  //     img.compositeImage(
+  //       a4Canvas,
+  //       resized,
+  //       dstX: 0,
+  //       dstY: yOffset,
+  //     );
+  //
+  //     // Convert A4 canvas to PNG
+  //     final Uint8List a4Bytes =
+  //     Uint8List.fromList(img.encodePng(a4Canvas));
+  //
+  //     // Save temporary file
+  //     final tempDir = await getTemporaryDirectory();
+  //
+  //     addLog('tempDir........$tempDir');
+  //
+  //     addLog('file creation started........');
+  //
+  //     final file = File(
+  //       '${tempDir.path}/signed_a4_${DateTime.now().millisecondsSinceEpoch}.png',
+  //     );
+  //
+  //     await file.writeAsBytes(a4Bytes);
+  //     addLog('file creation successfully.......');
+  //     // Save to Downloads/Gallery
+  //     await Gal.putImage(
+  //       file.path,
+  //       album: 'Downloads',
+  //     );
+  //
+  //     addLog('A4 image saved successfully in Downloads');
+  //   } catch (e) {
+  //     addLog('Download Error: $e');
+  //   }
+  // }
 
   // void showSignedImagePopup(String signature) {
   //   if (signedImageBytes == null) {
@@ -1499,5 +1637,31 @@ using DSC Token.
         ),
       ),
     );
+  }
+
+  Future<Uint8List> createA4ImageFrom(Uint8List imageBytes) async {
+    // Decode the input image
+    final img.Image? original = img.decodeImage(imageBytes);
+    if (original == null) {
+      throw Exception('Unable to decode image');
+    }
+
+    // A4 dimensions at 300 DPI
+    const int a4Width = 2480;
+    const int a4Height = 3508;
+
+    // Create white A4 canvas
+    final img.Image a4Canvas = img.Image(width: a4Width, height: a4Height);
+    img.fill(a4Canvas, color: img.ColorRgb8(255, 255, 255));
+
+    // Resize the original to fit the A4 width
+    final img.Image resized = img.copyResize(original, width: a4Width);
+
+    // Center vertically
+    final int yOffset = ((a4Height - resized.height) / 2).round();
+    img.compositeImage(a4Canvas, resized, dstX: 0, dstY: yOffset);
+
+    // Encode to PNG
+    return Uint8List.fromList(img.encodePng(a4Canvas));
   }
 }
