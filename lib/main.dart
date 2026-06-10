@@ -216,6 +216,10 @@ class _HomePageState extends State<HomePage> {
     // const String base64GreenTick = "iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAApUlEQVRIS2NkoBAwUj8FmP5TQwNjJgAuxQYAv/0JmSGrLgAAAABJRU5ErkJggg==";
     // final Uint8List imageBytes = base64Decode(base64GreenTick);
 
+    // Load the green tick image from assets
+    final ByteData imageData = await rootBundle.load('assets/images/green_tick.png');
+    final Uint8List imageBytes = imageData.buffer.asUint8List();
+
     // Split text into lines to preserve line breaks
     final lines = documentText.split('\n');
 
@@ -226,9 +230,11 @@ class _HomePageState extends State<HomePage> {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              pw.Text(
-                'Digitally Signed Document',
-                style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
+              pw.Center(
+                child: pw.Text(
+                  'Government of Andhra Pradesh',
+                  style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
+                ),
               ),
               pw.SizedBox(height: 20),
               // Document content
@@ -240,6 +246,7 @@ class _HomePageState extends State<HomePage> {
               pw.Row(
                 children: [
                   pw.Spacer(),
+                  pw.Image(pw.MemoryImage(imageBytes), width: 30, height: 30),
                   // pw.Image(pw.MemoryImage(imageBytes), width: 30, height: 30),
                   // pw.Text('✓ ',
                   //     style: pw.TextStyle(
@@ -250,17 +257,29 @@ class _HomePageState extends State<HomePage> {
                   pw.SizedBox(width: 10),
                   pw.Expanded(
                     child: pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.end,
+                      crossAxisAlignment: pw.CrossAxisAlignment.center,
                       children: [
                         pw.Text('Digitally Signed By:',
                             style: pw.TextStyle(fontSize: 12, fontStyle: pw.FontStyle.italic)),
-                        pw.Text(signerLabel.isNotEmpty ? signerLabel : 'Undefined',
-                            style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+                        // pw.Text(signerLabel.isNotEmpty ? signerLabel : 'Undefined',
+                        //     style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+                        pw.Stack(
+                          alignment: pw.Alignment.center,
+                          children: [
+                            pw.Image(pw.MemoryImage(imageBytes), width: 80, height: 30, fit: pw.BoxFit.cover),
+                            pw.Text(signerLabel.isNotEmpty ? signerLabel : 'Undefined',
+                                style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                          ],
+                        ),
                         pw.SizedBox(height: 8),
-                        pw.Text('Date & Time:',
-                            style: pw.TextStyle(fontSize: 12, fontStyle: pw.FontStyle.italic)),
-                        pw.Text(DateFormat('yyyy.MM.dd HH:mm:ss').format(signTime) + ' IST',
-                            style: pw.TextStyle(fontSize: 12)),
+                        // pw.Text('Date & Time:',
+                        //     style: pw.TextStyle(fontSize: 12, fontStyle: pw.FontStyle.italic)),
+                        // pw.Text(DateFormat('yyyy.MM.dd HH:mm:ss').format(signTime) + ' IST',
+                        //     style: pw.TextStyle(fontSize: 12)),
+                        pw.Text(
+                          'Date & Time: ${DateFormat('yyyy.MM.dd HH:mm:ss').format(signTime)} IST',
+                          style: pw.TextStyle(fontSize: 12, fontStyle: pw.FontStyle.italic), // same style for entire text
+                        ),
                       ],
                     ),
                   ),
@@ -318,8 +337,7 @@ class _HomePageState extends State<HomePage> {
     });
 
     textController.text = '''
-                Government of Andhra Pradesh
-
+    
       A Digital Signature Certificate (DSC) is an electronic form of identity used to securely sign digital documents. The certificate is stored within a secure cryptographic token, commonly known as a DSC Token, which protects the private key from unauthorized access.
 
       Digital signatures provide authentication, integrity, and non-repudiation. Authentication confirms the identity of the signer, integrity ensures that the document has not been modified after signing, and non-repudiation prevents the signer from denying their signature.
@@ -328,6 +346,7 @@ class _HomePageState extends State<HomePage> {
 
       This document has been prepared for testing and demonstration purposes to validate the digital signing process using a DSC Token. Any modification to the signed content after the signature is applied will invalidate the signature verification.
 ''';
+
   }
 
   @override
@@ -616,11 +635,11 @@ class _HomePageState extends State<HomePage> {
                                 'Handle: ${key['handle']}${id.isNotEmpty ? '   ID: $id' : ''}',
                                 style: const TextStyle(fontSize: 12),
                               ),
-                              trailing: IconButton(
-                                icon: const Icon(Icons.delete, color: Colors.red),
-                                tooltip: 'Delete Key Pair',
-                                onPressed: () => handleDelete(key),
-                              ),
+                              // trailing: IconButton(
+                              //   icon: const Icon(Icons.delete, color: Colors.red),
+                              //   tooltip: 'Delete Key Pair',
+                              //   onPressed: () => handleDelete(key),
+                              // ),
                               onTap: () {
                                 Navigator.pop(dialogContext, {
                                   'action': 'existing',
@@ -817,8 +836,8 @@ class _HomePageState extends State<HomePage> {
                 Navigator.pop(context);
                 if (pin.isNotEmpty) {
                   addLog('PIN Entered, Starting Test...');
-                  // runTest(pin);
-                  runTest('9885632251');
+                  runTest(pin);
+                  // runTest('9885632251');
                 } else {
                   addLog('PIN Empty');
                 }
@@ -1100,28 +1119,28 @@ class _HomePageState extends State<HomePage> {
               height: 52,
               child: Row(
                 children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: showDocumentPreview,
-                      icon: const Icon(Icons.preview),
-                      label: const Text(
-                        'Preview',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        foregroundColor: Colors.white,
-                        elevation: 4,
-                        shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.only(
-                            topLeft: Radius.circular(14),
-                            bottomLeft: Radius.circular(14),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 2),
+                  // Expanded(
+                  //   child: ElevatedButton.icon(
+                  //     onPressed: showDocumentPreview,
+                  //     icon: const Icon(Icons.preview),
+                  //     label: const Text(
+                  //       'Preview',
+                  //       style: TextStyle(fontWeight: FontWeight.bold),
+                  //     ),
+                  //     style: ElevatedButton.styleFrom(
+                  //       backgroundColor: Colors.blue,
+                  //       foregroundColor: Colors.white,
+                  //       elevation: 4,
+                  //       shape: const RoundedRectangleBorder(
+                  //         borderRadius: BorderRadius.only(
+                  //           topLeft: Radius.circular(14),
+                  //           bottomLeft: Radius.circular(14),
+                  //         ),
+                  //       ),
+                  //     ),
+                  //   ),
+                  // ),
+                  // const SizedBox(width: 2),
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: tokenConnected && !loading ? showPinDialog : null,
@@ -1147,6 +1166,8 @@ class _HomePageState extends State<HomePage> {
                           borderRadius: BorderRadius.only(
                             topRight: Radius.circular(14),
                             bottomRight: Radius.circular(14),
+                            topLeft: Radius.circular(14),
+                            bottomLeft: Radius.circular(14),
                           ),
                         ),
                       ),

@@ -1,17 +1,18 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
-import 'dart:ui' as ui;
-import 'package:gal/gal.dart';
-import 'package:image/image.dart' as img;
-// import 'package:image_gallery_saver_plus/image_gallery_saver_plus.dart';
-import 'package:intl/intl.dart';
 
 import 'package:animated_snack_bar/animated_snack_bar.dart';
 import 'package:crypto/crypto.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
+import 'package:open_file/open_file.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+// import 'package:share_plus/share_plus.dart';
 
 import 'logger_service.dart';
 
@@ -58,15 +59,10 @@ class _HomePageState extends State<HomePage> {
   bool tokenConnected = false;
   bool loading = false;
   bool _running = true;
+  bool _showLogs = false;
 
   final ScrollController logScrollController = ScrollController();
   final TextEditingController textController = TextEditingController();
-
-  // Key for capturing the document widget
-  final GlobalKey repaintKey = GlobalKey();
-
-  Uint8List? generatedImage;
-  Uint8List? signedImageBytes;
 
   void scrollLogsToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -160,7 +156,7 @@ class _HomePageState extends State<HomePage> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
-                              '${logs.toString().isEmpty ? 0 : logs.toString().split('\n').length-1}',
+                              '${logs.toString().isEmpty ? 0 : logs.toString().split('\n').length - 1}',
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.bold,
@@ -211,527 +207,101 @@ class _HomePageState extends State<HomePage> {
     scrollLogsToBottom();
   }
 
-  // ================= Overlay signature fields on image =================
-  Future<Uint8List?> overlaySignatureOnImage(
-      Uint8List originalPng,
-      String signerLabel,
-      DateTime signTime,
-      ) async {
-    try {
-      // Decode the original image
-      final ui.Codec codec = await ui.instantiateImageCodec(originalPng);
-      final ui.FrameInfo frame = await codec.getNextFrame();
-      final ui.Image original = frame.image;
+  // ================= PDF GENERATION WITH SIGNATURE BLOCK =================
+  Future<Uint8List> generateSignedPdf(
+      String documentText, String signerLabel, DateTime signTime) async {
+    final pdf = pw.Document();
 
-      // Create canvas
-      final ui.PictureRecorder recorder = ui.PictureRecorder();
-      final Canvas canvas = Canvas(recorder);
-      final Paint paint = Paint();
+    // Decode Base64 image
+    // const String base64GreenTick = "iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAApUlEQVRIS2NkoBAwUj8FmP5TQwNjJgAuxQYAv/0JmSGrLgAAAABJRU5ErkJggg==";
+    // final Uint8List imageBytes = base64Decode(base64GreenTick);
 
-      // Draw original image
-      canvas.drawImage(original, Offset.zero, paint);
+    // Load the green tick image from assets
+    final ByteData imageData = await rootBundle.load('assets/images/green_tick.png');
+    final Uint8List imageBytes = imageData.buffer.asUint8List();
 
-      // Signer details
-      final signer = signerLabel.isNotEmpty ? signerLabel : 'Undefined';
-      final formattedTime =
-          DateFormat('yyyy.MM.dd HH:mm:ss').format(signTime) + ' IST';
+    // Split text into lines to preserve line breaks
+    final lines = documentText.split('\n');
 
-      // Build signature text
-      final ui.ParagraphBuilder paragraphBuilder = ui.ParagraphBuilder(
-        ui.ParagraphStyle(
-          textAlign: TextAlign.right,
-        ),
-      )
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        build: (context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(
+                'Digitally Signed Document',
+                style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
+              ),
+              pw.SizedBox(height: 20),
+              // Document content
+              ...lines.map((line) => pw.Text(line, style: pw.TextStyle(fontSize: 12))),
+              pw.SizedBox(height: 50),
+              // pw.Divider(),
+              // pw.SizedBox(height: 20),
+              // Signature block with green tick
+              pw.Row(
+                children: [
+                  pw.Spacer(),
+                  pw.Image(pw.MemoryImage(imageBytes), width: 30, height: 30),
+                  // pw.Image(pw.MemoryImage(imageBytes), width: 30, height: 30),
+                  // pw.Text('✓ ',
+                  //     style: pw.TextStyle(
+                  //       fontSize: 30,
+                  //       color: PdfColors.green,
+                  //       fontWeight: pw.FontWeight.bold,
+                  //     )),
+                  pw.SizedBox(width: 10),
+                  pw.Expanded(
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.end,
+                      children: [
+                        pw.Text('Digitally Signed By:',
+                            style: pw.TextStyle(fontSize: 12, fontStyle: pw.FontStyle.italic)),
+                        pw.Text(signerLabel.isNotEmpty ? signerLabel : 'Undefined',
+                            style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+                        pw.SizedBox(height: 8),
+                        pw.Text('Date & Time:',
+                            style: pw.TextStyle(fontSize: 12, fontStyle: pw.FontStyle.italic)),
+                        pw.Text(DateFormat('yyyy.MM.dd HH:mm:ss').format(signTime) + ' IST',
+                            style: pw.TextStyle(fontSize: 12)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
 
-      // Digitally Signed
-        ..pushStyle(
-          ui.TextStyle(
-            color: Colors.black,
-            fontSize: 18,
-            fontWeight: FontWeight.normal,
-            fontStyle: FontStyle.italic,
-          ),
-        )
-        ..addText('Digitally Signed\n')
-
-      // Signer
-        ..pushStyle(
-          ui.TextStyle(
-            color: Colors.black,
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-          ),
-        )
-        ..addText('Signer: $signer\n')
-
-      // Time
-        ..pushStyle(
-          ui.TextStyle(
-            color: Colors.black,
-            fontSize: 18,
-            fontWeight: FontWeight.normal,
-            fontStyle: FontStyle.italic,
-          ),
-        )
-        ..addText('Time: $formattedTime');
-
-      final ui.Paragraph paragraph = paragraphBuilder.build()
-        ..layout(
-          ui.ParagraphConstraints(
-            width: original.width.toDouble(),
-          ),
-        );
-
-      // Bottom-right position
-      final double x = original.width - paragraph.width - 20;
-      final double y = original.height - paragraph.height - 20;
-
-      // ==========================
-      // GREEN TICK WATERMARK
-      // ==========================
-      final Paint tickPaint = Paint()
-        ..color = const Color(0x884CAF50) // semi-transparent green
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 10
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round;
-
-      // Position tick near signer text
-      final double tickX = x - 55;
-      final double tickY = y + 42;
-      final double tickSize = 40;
-
-      final Path tickPath = Path()
-        ..moveTo(tickX, tickY)
-        ..lineTo(
-          tickX + tickSize * 0.30,
-          tickY + tickSize * 0.30,
-        )
-        ..lineTo(
-          tickX + tickSize,
-          tickY - tickSize * 0.40,
-        );
-
-      canvas.drawPath(tickPath, tickPaint);
-
-      // Draw signature text
-      canvas.drawParagraph(
-        paragraph,
-        Offset(x, y),
-      );
-
-      // Convert to PNG
-      final ui.Picture picture = recorder.endRecording();
-      final ui.Image signedImage = await picture.toImage(
-        original.width,
-        original.height,
-      );
-
-      final ByteData? byteData = await signedImage.toByteData(
-        format: ui.ImageByteFormat.png,
-      );
-
-      return byteData?.buffer.asUint8List();
-    } catch (e) {
-      await addLog('Overlay error: $e');
-      return null;
-    }
+    return await pdf.save();
   }
-  // Future<Uint8List?> overlaySignatureOnImage(
-  //     Uint8List originalPng,
-  //     String signerLabel,
-  //     DateTime signTime,
-  //     ) async {
-  //   try {
-  //     // Decode the original image
-  //     final ui.Codec codec = await ui.instantiateImageCodec(originalPng);
-  //     final ui.FrameInfo frame = await codec.getNextFrame();
-  //     final ui.Image original = frame.image;
-  //
-  //     // Create a canvas to draw on
-  //     final ui.PictureRecorder recorder = ui.PictureRecorder();
-  //     final Canvas canvas = Canvas(recorder);
-  //     final Paint paint = Paint();
-  //
-  //     // Draw the original image
-  //     canvas.drawImage(original, Offset.zero, paint);
-  //
-  //     // Format the signer string
-  //     final signer = signerLabel.isNotEmpty ? signerLabel : 'Undefined';
-  //     // final formattedTime = "${signTime.year}-${signTime.month}-${signTime.day} "
-  //     //     "${signTime.hour}:${signTime.minute}:${signTime.second}";
-  //     final formattedTime = DateFormat('yyyy.MM.dd HH:mm:ss').format(signTime) + ' IST';
-  //
-  //     // Build the text paragraph (only three lines)
-  //     final ui.ParagraphBuilder paragraphBuilder = ui.ParagraphBuilder(
-  //       ui.ParagraphStyle(
-  //         textAlign: TextAlign.right,
-  //       ),
-  //     )
-  //
-  //     // Digitally Signed
-  //       ..pushStyle(
-  //         ui.TextStyle(
-  //           color: Colors.black,
-  //           fontSize: 18,
-  //           // fontWeight: FontWeight.bold,
-  //           fontWeight: FontWeight.normal,
-  //           fontStyle: FontStyle.italic,
-  //         ),
-  //       )
-  //       ..addText('Digitally Signed\n')
-  //
-  //     // Signer
-  //       ..pushStyle(
-  //         ui.TextStyle(
-  //           color: Colors.black,
-  //           fontSize: 20,
-  //           fontWeight: FontWeight.bold
-  //         ),
-  //       )
-  //       ..addText('Signer: $signer\n')
-  //
-  //     // Time
-  //       ..pushStyle(
-  //         ui.TextStyle(
-  //           color: Colors.black,
-  //           fontSize: 18,
-  //           fontWeight: FontWeight.normal,
-  //           fontStyle: FontStyle.italic,
-  //         ),
-  //       )
-  //       ..addText('Time: $formattedTime');
-  //
-  //     // final ui.ParagraphBuilder paragraphBuilder = ui.ParagraphBuilder(
-  //     //   ui.ParagraphStyle(
-  //     //     fontSize: 20,
-  //     //     fontWeight: FontWeight.bold,
-  //     //     textAlign: TextAlign.right,
-  //     //   ),
-  //     // )
-  //     //   ..pushStyle(ui.TextStyle(color: const Color(0xFFCC0000)))
-  //     //   ..addText('Digitally Signed\nSigner: $signer\nTime: $formattedTime');
-  //
-  //     final ui.Paragraph paragraph = paragraphBuilder.build()
-  //       ..layout(ui.ParagraphConstraints(width: original.width.toDouble()));
-  //
-  //     // Position at bottom-right with 20px padding
-  //     final double x = original.width - paragraph.width - 20;
-  //     final double y = original.height - paragraph.height - 20;
-  //     canvas.drawParagraph(paragraph, Offset(x, y));
-  //
-  //     // Convert to PNG bytes
-  //     final ui.Picture picture = recorder.endRecording();
-  //     final ui.Image signedImage = await picture.toImage(original.width, original.height);
-  //     final ByteData? byteData = await signedImage.toByteData(format: ui.ImageByteFormat.png);
-  //     return byteData?.buffer.asUint8List();
-  //   } catch (e) {
-  //     await addLog('Overlay error: $e');
-  //     return null;
-  //   }
-  // }
-  // ================================================================
 
-  Future<String?> generateHashHex() async {
+  Future<String?> generateHashFromText() async {
     try {
-      await addLog('Generating Image...');
-
-      final boundary = repaintKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
-      final ui.Image image = await boundary.toImage(pixelRatio: 3);
-      final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-
-      if (byteData == null) {
-        await addLog('ByteData NULL');
+      final String documentText = textController.text;
+      if (documentText.trim().isEmpty) {
+        await addLog('Document text is empty');
         return null;
       }
 
-      final pngBytes = byteData.buffer.asUint8List();
-      generatedImage = pngBytes;
-      signedImageBytes = pngBytes; // initial copy, will be overlaid later
-
-      final digest = sha256.convert(pngBytes);
+      final bytes = utf8.encode(documentText);
+      final digest = sha256.convert(bytes);
       final hashHex = digest.toString();
 
-      await addLog('HashHex = $hashHex');
+      await addLog('Document text hash (SHA256): $hashHex');
       return hashHex;
     } catch (e, stackTrace) {
-      await addLog('Image Error: $e');
+      await addLog('Hash generation error: $e');
       await addLog(stackTrace.toString());
       return null;
     }
   }
 
-  void showSignedImagePopup(String signature) {
-    if (signedImageBytes == null) {
-      addLog('No Signed Image Available');
-      return;
-    }
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return Dialog(
-          insetPadding: const EdgeInsets.all(20),
-          child: SizedBox(
-            width: 700,
-            height: 800,
-            child: Column(
-              children: [
-                const Padding(
-                  padding: EdgeInsets.all(12),
-                  child: Text(
-                    'Signed Image Preview',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-
-                // Expanded(
-                //   child: InteractiveViewer(
-                //     minScale: 0.5,
-                //     maxScale: 5,
-                //     child: Image.memory(
-                //       signedImageBytes!,
-                //       width: double.infinity,
-                //       fit: BoxFit.contain,
-                //     ),
-                //   ),
-                // ),
-                Expanded(
-                  child: Container(
-                    width: double.infinity,
-                    height: double.infinity,
-                    padding: const EdgeInsets.all(8),
-                    child: InteractiveViewer(
-                      minScale: 0.5,
-                      maxScale: 5,
-                      child: SizedBox(
-                        width: double.infinity,
-                        height: double.infinity,
-                        child: Image.memory(
-                          signedImageBytes!,
-                          fit: BoxFit.contain,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 10),
-
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    ElevatedButton.icon(
-                      onPressed: downloadSignedImagetodownloades,
-                      icon: const Icon(Icons.download),
-                      label: const Text('Download'),
-                    ),
-                    const SizedBox(width: 12),
-                    ElevatedButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Close'),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 12),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  // Future<void> downloadSignedImage() async {
-  //   try {
-  //     if (signedImageBytes == null) {
-  //       addLog('No image available');
-  //       return;
-  //     }
-  //
-  //     // A4 size at 300 DPI
-  //     const int a4Width = 2480;
-  //     const int a4Height = 3508;
-  //
-  //     final img.Image? original =
-  //     img.decodeImage(signedImageBytes!);
-  //
-  //     if (original == null) {
-  //       addLog('Unable to decode image');
-  //       return;
-  //     }
-  //
-  //     // Create A4 white canvas
-  //     final img.Image a4Canvas = img.Image(
-  //       width: a4Width,
-  //       height: a4Height,
-  //     );
-  //
-  //     img.fill(
-  //       a4Canvas,
-  //       color: img.ColorRgb8(255, 255, 255),
-  //     );
-  //
-  //     // Resize image to fit A4
-  //     final img.Image resized = img.copyResize(
-  //       original,
-  //       width: a4Width,
-  //     );
-  //
-  //     final int yOffset =
-  //     ((a4Height - resized.height) / 2).round();
-  //
-  //     img.compositeImage(
-  //       a4Canvas,
-  //       resized,
-  //       dstX: 0,
-  //       dstY: yOffset,
-  //     );
-  //
-  //     // Convert back to PNG
-  //     final Uint8List a4Bytes =
-  //     Uint8List.fromList(img.encodePng(a4Canvas));
-  //
-  //     final result = await ImageGallerySaverPlus.saveImage(
-  //       a4Bytes,
-  //       quality: 100,
-  //       name: 'signed_image_a4_${DateTime.now().millisecondsSinceEpoch}',
-  //     );
-  //
-  //     addLog('A4 Image saved successfully in gallary');
-  //     addLog(result.toString());
-  //
-  //   } catch (e) {
-  //     addLog('Download Error: $e');
-  //   }
-  // }
-
-  Future<void> downloadSignedImagetodownloades() async {
-    addLog('downloadSignedImagetodownloades Calling........');
-    try {
-      if (signedImageBytes == null) return;
-
-      // A4 size at 300 DPI
-      const int a4Width = 2480;
-      const int a4Height = 3508;
-
-      addLog('Decode original signed image Startinging........');
-      // Decode original signed image
-      final img.Image? original = img.decodeImage(signedImageBytes!);
-      addLog('Decode original signed image Ending........');
-
-      if (original == null) {
-        addLog('Unable to decode image');
-        return;
-      }
-
-      // Create white A4 canvas
-      final img.Image a4Canvas = img.Image(
-        width: a4Width,
-        height: a4Height,
-      );
-
-      img.fill(
-        a4Canvas,
-        color: img.ColorRgb8(255, 255, 255),
-      );
-
-      // Resize image to fit A4 width
-      final img.Image resized = img.copyResize(
-        original,
-        width: a4Width,
-      );
-
-      // Center vertically
-      final int yOffset =
-      ((a4Height - resized.height) / 2).round();
-
-      img.compositeImage(
-        a4Canvas,
-        resized,
-        dstX: 0,
-        dstY: yOffset,
-      );
-
-      // Convert A4 canvas to PNG
-      final Uint8List a4Bytes =
-      Uint8List.fromList(img.encodePng(a4Canvas));
-
-      // Save temporary file
-      final tempDir = await getTemporaryDirectory();
-
-      addLog('tempDir........$tempDir');
-
-      addLog('file creation started........');
-
-      final file = File(
-        '${tempDir.path}/signed_a4_${DateTime.now().millisecondsSinceEpoch}.png',
-      );
-
-      await file.writeAsBytes(a4Bytes);
-      addLog('file creation successfully.......');
-      // Save to Downloads/Gallery
-      await Gal.putImage(
-        file.path,
-        album: 'Downloads',
-      );
-
-      addLog('A4 image saved successfully in Downloads');
-    } catch (e) {
-      addLog('Download Error: $e');
-    }
-  }
-
-  // void showSignedImagePopup(String signature) {
-  //   if (signedImageBytes == null) {
-  //     addLog('No Signed Image Available');
-  //     return;
-  //   }
-  //
-  //   showDialog(
-  //     context: context,
-  //     builder: (context) {
-  //       return Dialog(
-  //         child: Container(
-  //           padding: const EdgeInsets.all(16),
-  //           constraints: const BoxConstraints(maxHeight: 700),
-  //           child: Column(
-  //             mainAxisSize: MainAxisSize.min,
-  //             children: [
-  //               const Text(
-  //                 'Signed Image Preview',
-  //                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-  //               ),
-  //               const SizedBox(height: 16),
-  //               Expanded(
-  //                 child: SingleChildScrollView(
-  //                   child: Column(
-  //                     children: [
-  //                       ClipRRect(
-  //                         borderRadius: BorderRadius.circular(12),
-  //                         child: Image.memory(signedImageBytes!),
-  //                       ),
-  //                     ],
-  //                   ),
-  //                 ),
-  //               ),
-  //               const SizedBox(height: 16),
-  //               ElevatedButton(
-  //                 onPressed: () => Navigator.pop(context),
-  //                 child: const Text('Close'),
-  //               ),
-  //             ],
-  //           ),
-  //         ),
-  //       );
-  //     },
-  //   );
-  // }
-
+  // ---------- USB monitoring and PKCS#11 methods ----------
   @override
   void initState() {
     super.initState();
@@ -753,12 +323,17 @@ class _HomePageState extends State<HomePage> {
     });
 
     textController.text = '''
-Digital Signature Test
+                Government of Andhra Pradesh
 
-This content is converted
-into image and signed
-using DSC Token.
+      A Digital Signature Certificate (DSC) is an electronic form of identity used to securely sign digital documents. The certificate is stored within a secure cryptographic token, commonly known as a DSC Token, which protects the private key from unauthorized access.
+
+      Digital signatures provide authentication, integrity, and non-repudiation. Authentication confirms the identity of the signer, integrity ensures that the document has not been modified after signing, and non-repudiation prevents the signer from denying their signature.
+
+      The use of digital signatures enables secure electronic transactions, reduces paperwork, improves efficiency, and supports environmentally friendly digital governance. Government departments, businesses, and individuals widely use DSC-based signing for applications, approvals, contracts, and official records.
+
+      This document has been prepared for testing and demonstration purposes to validate the digital signing process using a DSC Token. Any modification to the signed content after the signature is applied will invalidate the signature verification.
 ''';
+
   }
 
   @override
@@ -818,7 +393,7 @@ using DSC Token.
       loading = true;
     });
 
-    String? selectedKeyLabel; // to store the label of the key used
+    String? selectedKeyLabel;
 
     try {
       await addLog('--------------------------------');
@@ -861,7 +436,6 @@ using DSC Token.
         final handles = await _channel.invokeMethod('generateKeypair');
         await addLog('Public Key Handle: ${handles['publicKey']}');
         await addLog('Private Key Handle: ${handles['privateKey']}');
-        // For a newly generated key, we don't have a label. Use empty string (will show 'Undefined')
         selectedKeyLabel = '';
       } else {
         selectedKeyLabel = selection['label']?.toString() ?? '';
@@ -872,36 +446,70 @@ using DSC Token.
         });
       }
 
-      final hashHex = await generateHashHex();
+      // 1. Generate hash from document text
+      final hashHex = await generateHashFromText();
       if (hashHex == null) {
         await addLog('Hash Generation Failed');
         return;
       }
 
+      // 2. Sign the hash
       await addLog('Signing Data...');
       final signature = await _channel.invokeMethod('signData', {'hashHex': hashHex});
       final String signatureText = signature.toString();
-      await addLog(signatureText);
+      await addLog('Signature: $signatureText');
 
-      // ========== Overlay the three fields (no raw signature) ==========
-      if (generatedImage != null) {
-        final overlaid = await overlaySignatureOnImage(
-          generatedImage!,
-          selectedKeyLabel ?? '',
-          DateTime.now(),
-        );
-        if (overlaid != null) {
-          signedImageBytes = overlaid;
-          await addLog('Signature fields overlaid onto image');
-        } else {
-          signedImageBytes = generatedImage;
-          await addLog('Overlay failed, using original image');
+      // 3. Generate PDF with signature block
+      final pdfBytes = await generateSignedPdf(
+        textController.text,
+        selectedKeyLabel ?? '',
+        DateTime.now(),
+      );
+      await addLog('PDF generated, size: ${pdfBytes.length} bytes');
+
+      // 4. Save PDF directly to Downloads folder using path_provider
+      try {
+        final directory = await getDownloadsDirectory();
+        if (directory == null) {
+          await addLog('❌ Could not access Downloads folder');
+          if (mounted) {
+            AnimatedSnackBar.material(
+              '❌ Could not access Downloads folder',
+              type: AnimatedSnackBarType.error,
+              duration: const Duration(seconds: 5),
+            ).show(context);
+          }
+          return;
+        }
+
+        final fileName = 'signed_document_${DateTime.now().millisecondsSinceEpoch}.pdf';
+        final file = File('${directory.path}/$fileName');
+        await file.writeAsBytes(pdfBytes);
+        await addLog('✅ Signed PDF saved to: ${file.path}');
+
+        if (mounted) {
+          AnimatedSnackBar.material(
+            '✅ PDF digitally signed and saved to Downloads',
+            type: AnimatedSnackBarType.success,
+            duration: const Duration(seconds: 5),
+            mobilePositionSettings: const MobilePositionSettings(topOnAppearance: 100),
+          ).show(context);
+
+          // NEW: Show dialog with Open and Share/Download buttons
+          _showPdfSuccessDialog(file.path);
+        }
+      } catch (e) {
+        await addLog('❌ Exception saving PDF: $e');
+        if (mounted) {
+          AnimatedSnackBar.material(
+            '❌ Error saving PDF: $e',
+            type: AnimatedSnackBarType.error,
+            duration: const Duration(seconds: 5),
+          ).show(context);
         }
       }
-      // =================================================================
 
-      showSignedImagePopup(signatureText); // popup shows overlaid image
-
+      // 5. Verify signature (optional)
       await addLog('Verifying Signature...');
       final verify = await _channel.invokeMethod('verifySignature');
       await addLog('Verify Result = $verify');
@@ -1014,11 +622,11 @@ using DSC Token.
                                 'Handle: ${key['handle']}${id.isNotEmpty ? '   ID: $id' : ''}',
                                 style: const TextStyle(fontSize: 12),
                               ),
-                              trailing: IconButton(
-                                icon: const Icon(Icons.delete, color: Colors.red),
-                                tooltip: 'Delete Key Pair',
-                                onPressed: () => handleDelete(key),
-                              ),
+                              // trailing: IconButton(
+                              //   icon: const Icon(Icons.delete, color: Colors.red),
+                              //   tooltip: 'Delete Key Pair',
+                              //   onPressed: () => handleDelete(key),
+                              // ),
                               onTap: () {
                                 Navigator.pop(dialogContext, {
                                   'action': 'existing',
@@ -1058,7 +666,139 @@ using DSC Token.
     );
   }
 
+  // NEW: Dialog shown after PDF is saved
+  void _showPdfSuccessDialog(String filePath) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.picture_as_pdf, color: Colors.deepPurple),
+              SizedBox(width: 8),
+              Text('PDF Generated Successfully'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Your digitally signed document is ready.'),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.save_alt, size: 16, color: Colors.deepPurple),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        filePath,
+                        style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () async {
+                // Open the PDF with default viewer
+                try {
+                  final result = await OpenFile.open(filePath);
+                  if (result.type != ResultType.done) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Could not open PDF file')),
+                    );
+                  }
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error opening file: $e')),
+                  );
+                }
+              },
+              icon: const Icon(Icons.open_in_new),
+              label: const Text('Open'),
+            ),
+            ElevatedButton.icon(
+              onPressed: () async {
+                try {
+                  String? outputPath = await FilePicker.platform.saveFile(
+                    dialogTitle: 'Save Signed PDF',
+                    fileName: 'signed_document_${DateTime.now().millisecondsSinceEpoch}.pdf',
+                    bytes: await File(filePath).readAsBytes(), // optional: pass bytes to write directly
+                  );
+                  if (outputPath != null) {
+                    // File already saved? Actually saveFile writes the bytes if provided.
+                    // Alternatively, we could just copy the existing file.
+                    final sourceFile = File(filePath);
+                    final destFile = File(outputPath);
+                    await sourceFile.copy(destFile.path);
+
+                    AnimatedSnackBar.material(
+                      'PDF saved to: $outputPath',
+                      type: AnimatedSnackBarType.info,
+                      duration: const Duration(seconds: 6),
+                      mobilePositionSettings: const MobilePositionSettings(topOnAppearance: 100),
+                      mobileSnackBarPosition: MobileSnackBarPosition.top,
+                      desktopSnackBarPosition: DesktopSnackBarPosition.topCenter,
+                    ).show(context);
+
+
+                    // ScaffoldMessenger.of(context).showSnackBar(
+                    //   SnackBar(content: Text('PDF saved to: $outputPath')),
+                    // );
+
+
+                  }
+                } catch (e) {
+
+                  AnimatedSnackBar.material(
+                    'Error saving: $e',
+                    type: AnimatedSnackBarType.error,
+                    duration: const Duration(seconds: 6),
+                    mobilePositionSettings: const MobilePositionSettings(topOnAppearance: 100),
+                    mobileSnackBarPosition: MobileSnackBarPosition.top,
+                    desktopSnackBarPosition: DesktopSnackBarPosition.topCenter,
+                  ).show(context);
+
+                  // ScaffoldMessenger.of(context).showSnackBar(
+                  //   SnackBar(content: Text('Error saving: $e')),
+                  // );
+                }
+              },
+              icon: const Icon(Icons.download),
+              label: const Text('Download'),
+            )
+          ],
+        );
+      },
+    );
+  }
+
   void showPinDialog() {
+    if (textController.text.trim().isEmpty) {
+      addLog('Cannot proceed: Document content is empty');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter document content before signing'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
     final controller = TextEditingController();
     showDialog(
       context: context,
@@ -1083,7 +823,8 @@ using DSC Token.
                 Navigator.pop(context);
                 if (pin.isNotEmpty) {
                   addLog('PIN Entered, Starting Test...');
-                  runTest(pin);
+                  // runTest(pin);
+                  runTest('9885632251');
                 } else {
                   addLog('PIN Empty');
                 }
@@ -1098,6 +839,7 @@ using DSC Token.
 
   @override
   Widget build(BuildContext context) {
+    // Decode Base64 image
     return Scaffold(
       appBar: AppBar(
         toolbarHeight: 80,
@@ -1209,6 +951,7 @@ using DSC Token.
         padding: const EdgeInsets.all(15),
         child: Column(
           children: [
+            // USB status (fixed)
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
@@ -1257,11 +1000,12 @@ using DSC Token.
               ),
             ),
             const SizedBox(height: 10),
+
+            // Document header (fixed)
             Container(
               width: double.infinity,
               decoration: BoxDecoration(
                 color: const Color(0xFF7C3AED),
-                // color: Colors.white,
                 borderRadius: const BorderRadius.only(
                   topLeft: Radius.circular(12),
                   topRight: Radius.circular(12),
@@ -1274,34 +1018,61 @@ using DSC Token.
                   ),
                 ],
               ),
-                child:Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.description, color: Colors.white, size: 18),
-                        const SizedBox(width: 8),
-                        const Text(
-                          'Document Content',
-                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
-                        ),
-                      ],
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                child: Row(
+                  children: [
+                    const Icon(Icons.description, color: Colors.white, size: 18),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Document Content',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
                     ),
-                  ),
+                    const Spacer(),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: TextButton(
+                        onPressed: () {
+                          textController.clear();
+                          addLog('Document content cleared by user');
+                          AnimatedSnackBar.material(
+                            'Document content cleared',
+                            type: AnimatedSnackBarType.info,
+                            duration: const Duration(seconds: 6),
+                            mobilePositionSettings: const MobilePositionSettings(topOnAppearance: 100),
+                            mobileSnackBarPosition: MobileSnackBarPosition.top,
+                            desktopSnackBarPosition: DesktopSnackBarPosition.topCenter,
+                          ).show(context);
+                        },
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.clear_all, size: 16),
+                            SizedBox(width: 4),
+                            Text('Clear', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            // Document content with RepaintBoundary
-            Align(
-              alignment: Alignment.topLeft,
-              child:RepaintBoundary(
-              key: repaintKey,
+            ),
+
+            // Document content area - scrollable and takes remaining space
+            Expanded(
               child: Container(
                 width: double.infinity,
                 decoration: BoxDecoration(
-                  // color: const Color(0xFF7C3AED),
-                  // borderRadius: BorderRadius.circular(12),
-                  // borderRadius: const BorderRadius.only(
-                  //   bottomLeft: Radius.circular(12),
-                  //   bottomRight: Radius.circular(12),
-                  // ),
                   boxShadow: [
                     BoxShadow(
                       color: Colors.deepPurple.withOpacity(0.25),
@@ -1310,70 +1081,48 @@ using DSC Token.
                     ),
                   ],
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Padding(
-                    //   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    //   child: Row(
-                    //     children: [
-                    //       const Icon(Icons.description, color: Colors.white, size: 18),
-                    //       const SizedBox(width: 8),
-                    //       const Text(
-                    //         'Document Content',
-                    //         style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
-                    //       ),
-                    //     ],
-                    //   ),
-                    // ),
-                    Container(
-                      // margin: const EdgeInsets.all(1),
-                      child: TextField(
-                        controller: textController,
-                        maxLines: 6,
-                        decoration: InputDecoration(
-                          hintText: 'Enter text to digitally sign...',
-                          filled: true,
-                          fillColor: Colors.white,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                          // border: OutlineInputBorder(borderRadius: BorderRadius.circular(11), borderSide: BorderSide.none),
-                          // enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(11), borderSide: BorderSide.none),
-                          // focusedBorder: OutlineInputBorder(
-                          //   // borderRadius: BorderRadius.circular(11),
-                          //   // borderSide: const BorderSide(color: Colors.deepPurple, width: 2),
-                          // ),
-                        ),
-                        style: const TextStyle(fontSize: 15, height: 1.3),
-                      ),
-                    ),
-                  ],
+                child: TextField(
+                  controller: textController,
+                  maxLines: null,
+                  expands: true,
+                  decoration: InputDecoration(
+                    hintText: 'Enter text to digitally sign...',
+                    filled: true,
+                    fillColor: Colors.white,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                  ),
+                  style: const TextStyle(fontSize: 14, height: 1.5),
                 ),
               ),
             ),
-      ),
 
             const SizedBox(height: 6),
+
+            // Buttons row (fixed)
             SizedBox(
               height: 52,
               child: Row(
                 children: [
                   Expanded(
                     child: ElevatedButton.icon(
-                      onPressed: tokenConnected && !loading ? showPinDialog : null,
-                      icon: loading
-                          ? const SizedBox(
-                        height: 18,
-                        width: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                      )
-                          : const Icon(Icons.play_arrow_rounded),
-                      label: Text(loading ? 'Running...' : 'Run Test', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      onPressed: showDocumentPreview,
+                      icon: const Icon(Icons.preview),
+                      label: const Text(
+                        'Preview',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.deepPurple,
+                        backgroundColor: Colors.blue,
                         foregroundColor: Colors.white,
                         elevation: 4,
                         shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.only(topLeft: Radius.circular(14), bottomLeft: Radius.circular(14)),
+                          borderRadius: BorderRadius.only(
+                            topLeft: Radius.circular(14),
+                            bottomLeft: Radius.circular(14),
+                          ),
                         ),
                       ),
                     ),
@@ -1381,28 +1130,30 @@ using DSC Token.
                   const SizedBox(width: 2),
                   Expanded(
                     child: ElevatedButton.icon(
-                      onPressed: () async {
-                        setState(() => logs.clear());
-                        await LoggerService.clearLogs();
-                        if (mounted) {
-                          AnimatedSnackBar.material(
-                            'Logs cleared successfully',
-                            type: AnimatedSnackBarType.info,
-                            duration: const Duration(seconds: 6),
-                            mobilePositionSettings: const MobilePositionSettings(topOnAppearance: 100),
-                            mobileSnackBarPosition: MobileSnackBarPosition.bottom,
-                            desktopSnackBarPosition: DesktopSnackBarPosition.bottomLeft,
-                          ).show(context);
-                        }
-                      },
-                      icon: const Icon(Icons.delete),
-                      label: const Text('Clear Logs', style: TextStyle(fontWeight: FontWeight.bold)),
+                      onPressed: tokenConnected && !loading ? showPinDialog : null,
+                      icon: loading
+                          ? const SizedBox(
+                        height: 18,
+                        width: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                          : const Icon(Icons.key_rounded),
+                      label: Text(
+                        loading ? 'Running...' : 'Digital Sign',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.redAccent,
+                        backgroundColor: Colors.deepPurple,
                         foregroundColor: Colors.white,
                         elevation: 4,
                         shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.only(topRight: Radius.circular(14), bottomRight: Radius.circular(14)),
+                          borderRadius: BorderRadius.only(
+                            topRight: Radius.circular(14),
+                            bottomRight: Radius.circular(14),
+                          ),
                         ),
                       ),
                     ),
@@ -1411,7 +1162,12 @@ using DSC Token.
               ),
             ),
             const SizedBox(height: 6),
-            Expanded(
+
+            // Logs section (sticky bottom, height animates)
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              height: _showLogs ? 250 : 45,
+              width: double.infinity,
               child: Container(
                 width: double.infinity,
                 decoration: BoxDecoration(
@@ -1438,59 +1194,129 @@ using DSC Token.
                         children: [
                           const Icon(Icons.article, color: Colors.white, size: 20),
                           const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Logs',
-                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                          const Text(
+                            'Logs',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
                             ),
                           ),
+                          const SizedBox(width: 8),
                           Container(
-                            alignment: Alignment.centerLeft,
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(12),
+                              color: Colors.white.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(16),
                             ),
                             child: Text(
                               '${logs.toString().isEmpty ? 0 : logs.toString().split('\n').length - 1}',
-                              textAlign: TextAlign.left,
-                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.deepPurple),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                          const Spacer(),
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: TextButton(
+                              onPressed: () async {
+                                setState(() => logs.clear());
+                                await LoggerService.clearLogs();
+                                if (mounted) {
+                                  AnimatedSnackBar.material(
+                                    'Logs cleared successfully',
+                                    type: AnimatedSnackBarType.info,
+                                    duration: const Duration(seconds: 6),
+                                    mobilePositionSettings: const MobilePositionSettings(topOnAppearance: 100),
+                                    mobileSnackBarPosition: MobileSnackBarPosition.bottom,
+                                    desktopSnackBarPosition: DesktopSnackBarPosition.bottomLeft,
+                                  ).show(context);
+                                }
+                              },
+                              style: TextButton.styleFrom(
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.clear_all, size: 16),
+                                  SizedBox(width: 4),
+                                  Text('Clear', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                                ],
+                              ),
                             ),
                           ),
                           const SizedBox(width: 8),
                           Container(
                             decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(8),
+                              color: Colors.white.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(16),
                             ),
                             child: InkWell(
                               borderRadius: BorderRadius.circular(6),
                               onTap: showFullScreenLogs,
                               child: const Padding(
                                 padding: EdgeInsets.all(4),
-                                child: Icon(Icons.fullscreen_rounded, color: Colors.deepPurple, size: 18),
+                                child: Icon(Icons.fullscreen_rounded, color: Colors.white, size: 20),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(6),
+                              onTap: () {
+                                setState(() {
+                                  _showLogs = !_showLogs;
+                                });
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.all(4),
+                                child: Icon(
+                                  _showLogs ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                                  color: Colors.white,
+                                  size: 22,
+                                ),
                               ),
                             ),
                           ),
                         ],
                       ),
                     ),
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.all(5),
-                        child: SingleChildScrollView(
-                          controller: logScrollController,
-                          child: SizedBox(
-                            width: double.infinity,
-                            child: SelectableText(
-                              logs.toString().isEmpty ? 'No logs available' : logs.toString(),
-                              textAlign: TextAlign.left,
-                              style: TextStyle(fontSize: 13, color: Colors.grey.shade800, height: 1.5),
+                    if (_showLogs)
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.all(5),
+                          child: SingleChildScrollView(
+                            controller: logScrollController,
+                            child: SizedBox(
+                              width: double.infinity,
+                              child: SelectableText(
+                                logs.toString().isEmpty ? 'No logs available' : logs.toString(),
+                                textAlign: TextAlign.left,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.grey.shade800,
+                                  height: 1.5,
+                                ),
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -1498,6 +1324,74 @@ using DSC Token.
           ],
         ),
       ),
+    );
+  }
+
+  void showDocumentPreview() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          insetPadding: const EdgeInsets.all(16),
+          child: Container(
+            width: double.maxFinite,
+            constraints: const BoxConstraints(
+              maxHeight: 600,
+            ),
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  color: Colors.deepPurple,
+                  child: const Row(
+                    children: [
+                      Icon(Icons.description, color: Colors.white),
+                      SizedBox(width: 10),
+                      Text(
+                        'Document Preview',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(20),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                      child: Text(
+                        textController.text,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          height: 1.6,
+                          color: Colors.black,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: ElevatedButton.icon(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                    label: const Text('Close'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
