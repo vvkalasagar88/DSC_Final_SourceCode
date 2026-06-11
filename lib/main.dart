@@ -7,6 +7,7 @@ import 'package:crypto/crypto.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:intl/intl.dart';
 import 'package:open_file/open_file.dart';
 import 'package:path_provider/path_provider.dart';
@@ -246,7 +247,7 @@ class _HomePageState extends State<HomePage> {
               pw.Row(
                 children: [
                   pw.Spacer(),
-                  pw.Image(pw.MemoryImage(imageBytes), width: 30, height: 30),
+                  // pw.Image(pw.MemoryImage(imageBytes), width: 30, height: 30),
                   // pw.Image(pw.MemoryImage(imageBytes), width: 30, height: 30),
                   // pw.Text('✓ ',
                   //     style: pw.TextStyle(
@@ -266,9 +267,22 @@ class _HomePageState extends State<HomePage> {
                         pw.Stack(
                           alignment: pw.Alignment.center,
                           children: [
-                            pw.Image(pw.MemoryImage(imageBytes), width: 80, height: 30, fit: pw.BoxFit.cover),
-                            pw.Text(signerLabel.isNotEmpty ? signerLabel : 'Undefined',
-                                style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                            // pw.Image(pw.MemoryImage(imageBytes), width: 80, height: 30, fit: pw.BoxFit.fill),
+                            pw.Opacity(
+                              opacity: 0.8, // Adjust as needed (0.0 = fully transparent, 1.0 = fully opaque)
+                              child: pw.Image(
+                                pw.MemoryImage(imageBytes),
+                                width: 80,
+                                height: 50,
+                                fit: pw.BoxFit.contain,
+                              ),
+                            ),
+                            pw.Text(
+                              '${signerLabel.isNotEmpty ? signerLabel : 'Undefined'}\nDate & Time: ${DateFormat('yyyy.MM.dd HH:mm:ss').format(signTime)} IST',
+                              style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold),
+                            ),
+                            // pw.Text(signerLabel.isNotEmpty ? signerLabel : 'Undefined',
+                            //     style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
                           ],
                         ),
                         pw.SizedBox(height: 8),
@@ -276,10 +290,10 @@ class _HomePageState extends State<HomePage> {
                         //     style: pw.TextStyle(fontSize: 12, fontStyle: pw.FontStyle.italic)),
                         // pw.Text(DateFormat('yyyy.MM.dd HH:mm:ss').format(signTime) + ' IST',
                         //     style: pw.TextStyle(fontSize: 12)),
-                        pw.Text(
-                          'Date & Time: ${DateFormat('yyyy.MM.dd HH:mm:ss').format(signTime)} IST',
-                          style: pw.TextStyle(fontSize: 12, fontStyle: pw.FontStyle.italic), // same style for entire text
-                        ),
+                        // pw.Text(
+                        //   'Date & Time: ${DateFormat('yyyy.MM.dd HH:mm:ss').format(signTime)} IST',
+                        //   style: pw.TextStyle(fontSize: 12, fontStyle: pw.FontStyle.italic), // same style for entire text
+                        // ),
                       ],
                     ),
                   ),
@@ -869,7 +883,13 @@ class _HomePageState extends State<HomePage> {
               end: Alignment.bottomRight,
               colors: [Colors.purple, Color(0xFF7C3AED), Color(0xFF9333EA)],
             ),
-            borderRadius: BorderRadius.circular(5),
+            // borderRadius: BorderRadius.circular(5),
+              borderRadius:BorderRadius.only(
+                // topLeft: Radius.circular(45),
+                // topRight: Radius.circular(45),
+                bottomLeft: Radius.circular(30),
+                bottomRight: Radius.circular(30),
+              ),
             boxShadow: [
               BoxShadow(
                 color: const Color(0xFF7C3AED).withOpacity(0.45),
@@ -962,6 +982,7 @@ class _HomePageState extends State<HomePage> {
       ),
       body: Padding(
         padding: const EdgeInsets.all(15),
+        // padding: const EdgeInsets.only(top: 15, bottom: 15),
         child: Column(
           children: [
             // USB status (fixed)
@@ -1014,6 +1035,26 @@ class _HomePageState extends State<HomePage> {
             ),
             const SizedBox(height: 10),
 
+
+            // Stack(
+            //   alignment: Alignment.center,
+            //   children: [
+            //     Opacity(
+            //       opacity: 0.8,
+            //       child: Image.asset(
+            //         'assets/images/green_tick1.png',
+            //         width: 80,
+            //         height: 50,
+            //         fit: BoxFit.contain,
+            //       ),
+            //     ),
+            //     Text(
+            //       'Undefinedfdgdfgdfgdfgdfgdfgdfgfd\nUndefinedfdgdfgdfgdfgdfgdfgdfgfd'
+            //           ,
+            //       style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+            //     ),
+            //   ],
+            // ),
             // Document header (fixed)
             Container(
               width: double.infinity,
@@ -1154,9 +1195,14 @@ class _HomePageState extends State<HomePage> {
                         ),
                       )
                           : const Icon(Icons.key_rounded),
-                      label: Text(
-                        loading ? 'Running...' : 'Digital Sign',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      label: loading
+                          ? const SpinKitFadingCircle(
+                        color: Colors.white,
+                        size: 18,
+                      )
+                          : const Text(
+                        'Digital Sign',
+                        style: TextStyle(fontWeight: FontWeight.bold),
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.deepPurple,
