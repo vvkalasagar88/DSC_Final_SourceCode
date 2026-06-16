@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:intl/intl.dart';
 import 'package:open_file/open_file.dart';
+// import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -333,6 +334,7 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
+    // getAppVersion();
     _running = true;
 
     _channel.setMethodCallHandler((call) async {
@@ -622,7 +624,7 @@ class _HomePageState extends State<HomePage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text('Select Key Pair',
+                    const Text('Select Key',
                         style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 12),
                     if (localKeys.isEmpty)
@@ -645,10 +647,10 @@ class _HomePageState extends State<HomePage> {
                             return ListTile(
                               leading: const Icon(Icons.vpn_key),
                               title: Text(key['label']?.toString() ?? 'Key'),
-                              subtitle: Text(
-                                'Handle: ${key['handle']}${id.isNotEmpty ? '   ID: $id' : ''}',
-                                style: const TextStyle(fontSize: 12),
-                              ),
+                              // subtitle: Text(
+                              //   'Handle: ${key['handle']}${id.isNotEmpty ? '   ID: $id' : ''}',
+                              //   style: const TextStyle(fontSize: 12),
+                              // ),
                               // trailing: IconButton(
                               //   icon: const Icon(Icons.delete, color: Colors.red),
                               //   tooltip: 'Delete Key Pair',
@@ -884,12 +886,12 @@ class _HomePageState extends State<HomePage> {
               colors: [Colors.purple, Color(0xFF7C3AED), Color(0xFF9333EA)],
             ),
             // borderRadius: BorderRadius.circular(5),
-              borderRadius:BorderRadius.only(
-                // topLeft: Radius.circular(45),
-                // topRight: Radius.circular(45),
-                bottomLeft: Radius.circular(30),
-                bottomRight: Radius.circular(30),
-              ),
+            borderRadius:BorderRadius.only(
+              // topLeft: Radius.circular(45),
+              // topRight: Radius.circular(45),
+              bottomLeft: Radius.circular(30),
+              bottomRight: Radius.circular(30),
+            ),
             boxShadow: [
               BoxShadow(
                 color: const Color(0xFF7C3AED).withOpacity(0.45),
@@ -955,7 +957,7 @@ class _HomePageState extends State<HomePage> {
                 ),
                 const SizedBox(width: 12),
                 const Text(
-                  'DSC Token Testing',
+                  'DSC Token Utility',
                   style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
@@ -967,14 +969,22 @@ class _HomePageState extends State<HomePage> {
               ],
             ),
             const SizedBox(height: 4),
-            const Text(
-              'Digital Signature Test',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-                color: Colors.white70,
-                letterSpacing: 1.2,
-                shadows: [Shadow(color: Colors.black38, offset: Offset(0, 5), blurRadius: 5)],
+            // VERSION CHIP
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.white.withOpacity(0.3)),
+              ),
+              child: Text(
+                "Version 1.0.0",
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.purple,
+                  fontWeight: FontWeight.bold,
+                  fontStyle: FontStyle.italic, // ✅ added italic
+                ),
               ),
             ),
           ],
@@ -1455,4 +1465,14 @@ class _HomePageState extends State<HomePage> {
       },
     );
   }
+
+  // String appVersion = "1.0.0";
+  //
+  // void getAppVersion() async {
+  //   PackageInfo packageInfo = await PackageInfo.fromPlatform();
+  //
+  //   setState(() {
+  //     appVersion = packageInfo.version;
+  //   });
+  // }
 }
