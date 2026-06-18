@@ -9,6 +9,11 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
+import java.io.ByteArrayInputStream
+import java.security.cert.CertificateFactory
+import java.security.cert.X509Certificate
+import javax.security.auth.x500.X500Principal
+
 import `in`.co.precisionit.innait.dsc.pkcs11.USBHandler.USBHandler
 import `in`.co.precisionit.innait.dsc.pkcs11.wrapper.CK_ATTRIBUTE
 import `in`.co.precisionit.innait.dsc.pkcs11.wrapper.CK_MECHANISM
@@ -664,6 +669,69 @@ class MainActivity : FlutterActivity() {
 
                         module.C_FindObjectsFinal(session)
 
+                        /*
+                         * RESOLVE CERTIFICATE HOLDER NAME (CN)
+                         *
+                         * The private key's CKA_LABEL is often a UUID
+                         * (e.g. f05a86f3-...), not a human name. Build a
+                         * catalog of ALL certificates on the token and
+                         * map each key to its certificate, then use the
+                         * certificate Subject CN as the display name:
+                         *   1. match by CKA_ID    (key id    == cert id)
+                         *   2. match by CKA_LABEL  (key label == cert label)
+                         *   3. single-certificate fallback
+                         *
+                         * Some tokens give the certificate a different
+                         * CKA_ID than the private key, so an id-only match
+                         * leaves the UUID showing. Matching by label and
+                         * the single-cert fallback recover the holder name.
+                         */
+                        val certs = listCertificates(module, session)
+
+                        for (item in keyList) {
+
+                            val keyId =
+                                item["id"]?.toString() ?: ""
+
+                            val keyLabel =
+                                item["label"]?.toString() ?: ""
+
+                            var cn = ""
+
+                            // 1. match by CKA_ID
+                            if (keyId.isNotEmpty()) {
+                                cn = certs.firstOrNull {
+                                    it.idHex.isNotEmpty() &&
+                                        it.idHex.equals(keyId, ignoreCase = true)
+                                }?.cn ?: ""
+                            }
+
+                            // 2. match by CKA_LABEL
+                            if (cn.isEmpty() && keyLabel.isNotEmpty()) {
+                                cn = certs.firstOrNull {
+                                    it.label.isNotEmpty() &&
+                                        it.label == keyLabel
+                                }?.cn ?: ""
+                            }
+
+                            // 3. single-certificate fallback
+                            if (cn.isEmpty() && certs.size == 1) {
+                                cn = certs[0].cn
+                            }
+
+                            if (cn.isNotEmpty()) {
+                                item["label"] = cn
+                                sendLog(
+                                    "Resolved holder name = $cn"
+                                )
+                            } else {
+                                sendLog(
+                                    "No certificate CN matched for key " +
+                                        "(id=$keyId, label=$keyLabel)"
+                                )
+                            }
+                        }
+
                         sendLog(
                             "Found ${keyList.size} private key(s)"
                         )
@@ -1174,6 +1242,198 @@ class MainActivity : FlutterActivity() {
         }
 
         return data
+    }
+
+    /*
+     * CERTIFICATE INFO READ FROM THE TOKEN
+     */
+    private data class CertInfo(
+        val idHex: String,
+        val label: String,
+        val cn: String
+    )
+
+    /*
+     * LIST ALL X.509 CERTIFICATES ON THE TOKEN
+     * Reads each certificate's CKA_ID and CKA_LABEL, then
+     * decodes its DER (CKA_VALUE) to extract the Subject
+     * Common Name (holder name). Used to map a private key
+     * to its human-readable certificate name.
+     */
+    private fun listCertificates(
+        module: PKCS11,
+        session: Long
+    ): List<CertInfo> {
+
+        val result = ArrayList<CertInfo>()
+
+        val template = arrayOf(
+            CK_ATTRIBUTE().apply {
+                type = PKCS11Constants.CKA_CLASS
+                pValue = PKCS11Constants.CKO_CERTIFICATE
+            }
+        )
+
+        module.C_FindObjectsInit(session, template)
+
+        try {
+
+            while (true) {
+
+                val found =
+                    module.C_FindObjects(session, 100)
+
+                if (found == null || found.isEmpty()) {
+                    break
+                }
+
+                for (handle in found) {
+
+                    var idHex = ""
+                    var label = ""
+                    var cn = ""
+
+                    /*
+                     * READ ID + LABEL
+                     */
+                    try {
+
+                        val meta = arrayOf(
+                            CK_ATTRIBUTE().apply {
+                                type = PKCS11Constants.CKA_ID
+                            },
+                            CK_ATTRIBUTE().apply {
+                                type = PKCS11Constants.CKA_LABEL
+                            }
+                        )
+
+                        module.C_GetAttributeValue(
+                            session,
+                            handle,
+                            meta
+                        )
+
+                        idHex =
+                            (meta[0].pValue as? ByteArray)
+                                ?.joinToString("") {
+                                    "%02X".format(it)
+                                } ?: ""
+
+                        label =
+                            (meta[1].pValue as? ByteArray)
+                                ?.toString(Charsets.UTF_8)
+                                ?.trim() ?: ""
+
+                    } catch (e: Exception) {
+                        sendLog("Cert Meta Warning: ${e.message}")
+                    }
+
+                    /*
+                     * READ DER VALUE -> SUBJECT CN
+                     */
+                    try {
+
+                        val valueAttr = arrayOf(
+                            CK_ATTRIBUTE().apply {
+                                type = PKCS11Constants.CKA_VALUE
+                            }
+                        )
+
+                        module.C_GetAttributeValue(
+                            session,
+                            handle,
+                            valueAttr
+                        )
+
+                        val der =
+                            valueAttr[0].pValue as? ByteArray
+
+                        if (der != null) {
+
+                            val cert =
+                                CertificateFactory
+                                    .getInstance("X.509")
+                                    .generateCertificate(
+                                        ByteArrayInputStream(der)
+                                    ) as X509Certificate
+
+                            cn = extractCN(
+                                cert.subjectX500Principal
+                                    .getName(X500Principal.RFC2253)
+                            )
+                        }
+
+                    } catch (e: Exception) {
+                        sendLog("Cert Value Warning: ${e.message}")
+                    }
+
+                    result.add(CertInfo(idHex, label, cn))
+
+                    sendLog(
+                        "Cert found: id=$idHex label=$label cn=$cn"
+                    )
+                }
+
+                if (found.size < 100) {
+                    break
+                }
+            }
+
+        } finally {
+            module.C_FindObjectsFinal(session)
+        }
+
+        return result
+    }
+
+    /*
+     * EXTRACT CN FROM AN RFC2253 SUBJECT DN
+     * Honours backslash-escaped characters inside
+     * attribute values (e.g. escaped commas).
+     */
+    private fun extractCN(dn: String): String {
+
+        var i = 0
+        val n = dn.length
+
+        while (i < n) {
+
+            val typeStart = i
+
+            while (i < n && dn[i] != '=') {
+                i++
+            }
+
+            val type =
+                dn.substring(typeStart, i).trim()
+
+            if (i < n) {
+                i++ // skip '='
+            }
+
+            val sb = StringBuilder()
+
+            while (i < n && dn[i] != ',') {
+
+                if (dn[i] == '\\' && i + 1 < n) {
+                    sb.append(dn[i + 1])
+                    i += 2
+                } else {
+                    sb.append(dn[i])
+                    i++
+                }
+            }
+
+            if (i < n) {
+                i++ // skip ','
+            }
+
+            if (type.equals("CN", ignoreCase = true)) {
+                return sb.toString().trim()
+            }
+        }
+
+        return ""
     }
 
     /*
